@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { problemStatements, allTechTags, allThemes } from './lib/parse'
-import { Badge, Card, Input, Button, Dialog, FilterChip } from './components/ui'
-import { Search, X } from 'lucide-react'
+import { Badge, Card, Input, Button, Dialog, BottomSheet, FilterChip } from './components/ui'
+import { Search, X, Copy, Check, ExternalLink, SlidersHorizontal } from 'lucide-react'
 
 const difficultyBand = (d) =>
   d <= 4.5 ? 'Easy' : d <= 6.5 ? 'Moderate' : d <= 8 ? 'Hard' : 'Very Hard'
@@ -23,6 +23,8 @@ function App() {
   const [minDifficulty, setMinDifficulty] = useState(0)
   const [sort, setSort] = useState('id')
   const [open, setOpen] = useState(null)
+  const [showFilters, setShowFilters] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const toggle = (list, setList, value) =>
     setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
@@ -73,18 +75,116 @@ function App() {
     setMaxDifficulty(10)
   }
 
+  const copyPS = async () => {
+    if (!open?.raw) return
+    await navigator.clipboard.writeText(open.raw)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  const openInChatGPT = () => {
+    if (!open?.raw) return
+    const q = encodeURIComponent(open.raw.slice(0, 6000))
+    window.open(`https://chatgpt.com/?q=${q}`, '_blank')
+  }
+  const filtersContent = (
+    <>
+      <FilterGroup title="Category">
+        {['All', 'Software', 'Hardware'].map((c) => (
+          <FilterChip
+            key={c}
+            active={category === c}
+            onClick={() => setCategory(c)}
+            count={c === 'All' ? problemStatements.length : problemStatements.filter((p) => p.category === c).length}
+          >
+            {c}
+          </FilterChip>
+        ))}
+      </FilterGroup>
+      <FilterGroup title={`Tech Stack (${allTechTags.length})`}>
+        <div className="space-y-1.5">
+          {allTechTags.map((t) => (
+            <FilterChip
+              key={t}
+              active={selectedTech.includes(t)}
+              onClick={() => toggle(selectedTech, setSelectedTech, t)}
+              count={techCounts[t]}
+            >
+              {t}
+            </FilterChip>
+          ))}
+        </div>
+      </FilterGroup>
+      <FilterGroup title="Difficulty Range">
+        <div className="space-y-2 px-1 text-sm text-zinc-400">
+          <label className="block">
+            Min: <span className="text-violet-300">{minDifficulty.toFixed(1)}</span>
+            <input
+              type="range" min="0" max="10" step="0.5" value={minDifficulty}
+              onChange={(e) => setMinDifficulty(Math.min(+e.target.value, maxDifficulty))}
+              className="mt-1 w-full accent-violet-500"
+            />
+          </label>
+          <label className="block">
+            Max: <span className="text-violet-300">{maxDifficulty.toFixed(1)}</span>
+            <input
+              type="range" min="0" max="10" step="0.5" value={maxDifficulty}
+              onChange={(e) => setMaxDifficulty(Math.max(+e.target.value, minDifficulty))}
+              className="mt-1 w-full accent-violet-500"
+            />
+          </label>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {[['≤5 Easy', 0, 5], ['5–7 Medium', 5, 7], ['7–8.5 Hard', 7, 8.5], ['8.5+ Expert', 8.5, 10]].map(([label, lo, hi]) => (
+              <button
+                key={label}
+                onClick={() => { setMinDifficulty(lo); setMaxDifficulty(hi) }}
+                className={`rounded-md border px-2 py-0.5 text-xs ${minDifficulty === lo && maxDifficulty === hi ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </FilterGroup>
+      <FilterGroup title="Theme">
+        <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+          {allThemes.map((t) => (
+            <FilterChip
+              key={t}
+              active={selectedThemes.includes(t)}
+              onClick={() => toggle(selectedThemes, setSelectedThemes, t)}
+              count={themeCounts[t]}
+            >
+              {t}
+            </FilterChip>
+          ))}
+        </div>
+      </FilterGroup>
+      {activeFilters > 0 && (
+        <Button variant="ghost" onClick={reset} className="w-full">
+          <X className="mr-1 h-3.5 w-3.5" /> Clear all filters ({activeFilters})
+        </Button>
+      )}
+    </>
+  )
+
   return (
     <div className="min-h-screen">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
-          <div className="flex items-center gap-2">
+        <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-3 sm:gap-4">
+          <div className="hidden items-center gap-2 sm:flex">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-sm font-bold">S</div>
             <div>
               <h1 className="text-sm font-semibold leading-tight">SIH 2026 Explorer</h1>
               <p className="text-xs text-zinc-500">{problemStatements.length} problem statements</p>
             </div>
           </div>
+          <button
+            onClick={() => setShowFilters(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800 lg:hidden"
+          >
+            <SlidersHorizontal className="h-4 w-4" /> Filters {activeFilters > 0 && <span className="rounded bg-violet-600 px-1.5 py-0.5 text-xs text-white">{activeFilters}</span>}
+          </button>
           <div className="relative ml-auto w-full max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
             <Input
@@ -100,86 +200,7 @@ function App() {
       <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
         {/* Sidebar */}
         <aside className="hidden w-64 shrink-0 space-y-6 lg:block">
-          <FilterGroup title="Category">
-            {['All', 'Software', 'Hardware'].map((c) => (
-              <FilterChip
-                key={c}
-                active={category === c}
-                onClick={() => setCategory(c)}
-                count={c === 'All' ? problemStatements.length : problemStatements.filter((p) => p.category === c).length}
-              >
-                {c}
-              </FilterChip>
-            ))}
-          </FilterGroup>
-
-          <FilterGroup title={`Tech Stack (${allTechTags.length})`}>
-            <div className="space-y-1.5">
-              {allTechTags.map((t) => (
-                <FilterChip
-                  key={t}
-                  active={selectedTech.includes(t)}
-                  onClick={() => toggle(selectedTech, setSelectedTech, t)}
-                  count={techCounts[t]}
-                >
-                  {t}
-                </FilterChip>
-              ))}
-            </div>
-          </FilterGroup>
-
-          <FilterGroup title="Difficulty Range">
-            <div className="space-y-2 px-1 text-sm text-zinc-400">
-              <label className="block">
-                Min: <span className="text-violet-300">{minDifficulty.toFixed(1)}</span>
-                <input
-                  type="range" min="0" max="10" step="0.5" value={minDifficulty}
-                  onChange={(e) => setMinDifficulty(Math.min(+e.target.value, maxDifficulty))}
-                  className="mt-1 w-full accent-violet-500"
-                />
-              </label>
-              <label className="block">
-                Max: <span className="text-violet-300">{maxDifficulty.toFixed(1)}</span>
-                <input
-                  type="range" min="0" max="10" step="0.5" value={maxDifficulty}
-                  onChange={(e) => setMaxDifficulty(Math.max(+e.target.value, minDifficulty))}
-                  className="mt-1 w-full accent-violet-500"
-                />
-              </label>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {[['≤5 Easy', 0, 5], ['5–7 Medium', 5, 7], ['7–8.5 Hard', 7, 8.5], ['8.5+ Expert', 8.5, 10]].map(([label, lo, hi]) => (
-                  <button
-                    key={label}
-                    onClick={() => { setMinDifficulty(lo); setMaxDifficulty(hi) }}
-                    className={`rounded-md border px-2 py-0.5 text-xs ${minDifficulty === lo && maxDifficulty === hi ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </FilterGroup>
-
-          <FilterGroup title="Theme">
-            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
-              {allThemes.map((t) => (
-                <FilterChip
-                  key={t}
-                  active={selectedThemes.includes(t)}
-                  onClick={() => toggle(selectedThemes, setSelectedThemes, t)}
-                  count={themeCounts[t]}
-                >
-                  {t}
-                </FilterChip>
-              ))}
-            </div>
-          </FilterGroup>
-
-          {activeFilters > 0 && (
-            <Button variant="ghost" onClick={reset} className="w-full">
-              <X className="mr-1 h-3.5 w-3.5" /> Clear all filters ({activeFilters})
-            </Button>
-          )}
+          {filtersContent}
         </aside>
 
         {/* Main list */}
@@ -230,7 +251,7 @@ function App() {
       </div>
 
       {/* Detail dialog */}
-      <Dialog open={!!open} onClose={() => setOpen(null)}>
+      <Dialog open={!!open} onClose={() => { setOpen(null); setCopied(false) }}>
         {open && (
           <div>
             <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
@@ -243,6 +264,16 @@ function App() {
             </div>
             <h2 className="pr-8 text-xl font-bold leading-snug">{open.title}</h2>
             <p className="mt-1 text-sm text-zinc-400">{open.org}</p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={copyPS} className="gap-1.5 border border-zinc-700">
+                {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                {copied ? 'Copied!' : 'Copy'}
+              </Button>
+              <Button variant="primary" onClick={openInChatGPT} className="gap-1.5">
+                <ExternalLink className="h-4 w-4" /> Open in ChatGPT
+              </Button>
+            </div>
 
             <div className="mt-3 flex flex-wrap gap-1.5">
               {open.tech.map((t) => <Badge key={t} variant="tech">{t}</Badge>)}
@@ -273,6 +304,12 @@ function App() {
           </div>
         )}
       </Dialog>
+
+      <BottomSheet open={showFilters} onClose={() => setShowFilters(false)} title={`Filters ${activeFilters ? `(${activeFilters})` : ''}`}>
+        <div className="space-y-6">
+          {filtersContent}
+        </div>
+      </BottomSheet>
     </div>
   )
 }
